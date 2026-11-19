@@ -2,15 +2,25 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\District;
+use App\Models\Eatery;
+use App\Models\Review;
 use Illuminate\View\View;
 
 class HomeController extends Controller
 {
     public function __invoke(): View
     {
-        return view('pages.pending', [
-            'heading' => 'Good food, close to home.',
-            'description' => 'Discover the carinderias, neighborhood kitchens, and everyday favorites of Davao City.',
+        $topRated = Eatery::with(['district', 'features'])
+            ->withCount('reviews')->withAvg('reviews', 'rating')
+            ->has('reviews')->orderByDesc('reviews_avg_rating')->orderBy('name')
+            ->take(3)->get();
+
+        return view('home', [
+            'eateryCount' => Eatery::count(),
+            'districtCount' => District::count(),
+            'reviewCount' => Review::count(),
+            'topRated' => $topRated,
         ]);
     }
 }

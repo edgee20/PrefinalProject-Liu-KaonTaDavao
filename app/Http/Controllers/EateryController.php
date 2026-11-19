@@ -2,16 +2,34 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\District;
 use App\Models\Eatery;
+use App\Models\Feature;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class EateryController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
-        return view('pages.pending', [
-            'heading' => 'Find your next favorite.',
-            'description' => 'A local directory of places to eat around Davao City.',
+        $eateries = Eatery::with(['district', 'features'])
+            ->withCount('reviews')->withAvg('reviews', 'rating')
+            ->when($request->filled('q'), function ($query) use ($request) {
+                $query->where(function ($search) use ($request) {
+                    $search->where('name', 'like', '%'.$request->input('q').'%')
+                        ->orWhere('specialty', 'like', '%'.$request->input('q').'%');
+                });
+            })
+            ->when($request->filled('district'), fn ($query) => $query->where('district_id', $request->input('district')))
+            ->when($request->filled('feature'), function ($query) use ($request) {
+                $query->whereHas('features', fn ($features) => $features->where('name', $request->input('feature')));
+            })
+            ->orderBy('name')->paginate(6)->withQueryString();
+
+        return view('eateries.index', [
+            'eateries' => $eateries,
+            'districts' => District::orderBy('name')->get(),
+            'features' => Feature::orderBy('name')->get(),
         ]);
     }
 
