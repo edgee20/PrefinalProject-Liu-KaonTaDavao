@@ -2,10 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreEateryRequest;
+use App\Http\Requests\UpdateEateryRequest;
 use App\Models\District;
 use App\Models\Eatery;
 use App\Models\Feature;
+use App\Models\User;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class EateryController extends Controller
@@ -35,40 +41,89 @@ class EateryController extends Controller
 
     public function create(): View
     {
-        return view('pages.pending', [
-            'heading' => 'Add an eatery',
-            'description' => 'Make another neighborhood favorite part of the guide.',
+        $eatery = new Eatery;
+        $eatery->setRelation('permit', null)->setRelation('features', collect());
+
+        return view('eateries.create', [
+            'eatery' => $eatery,
+            'districts' => District::orderBy('name')->get(),
+            'features' => Feature::orderBy('name')->get(),
         ]);
     }
 
-    public function store(): void
+    public function store(StoreEateryRequest $request): RedirectResponse
     {
-        abort(501, 'Eatery creation is not available yet.');
+        $fields = $request->validated();
+        $featureIds = $fields['features'];
+        $permit = ['permit_no' => $fields['permit_no'], 'expires_on' => $fields['expires_on']];
+        unset($fields['features'], $fields['permit_no'], $fields['expires_on']);
+        $fields['slug'] = Str::slug($fields['name']);
+        $fields['is_open'] = (bool) ($fields['is_open'] ?? false);
+
+        $eatery = DB::transaction(function () use ($fields, $permit, $featureIds) {
+            $eatery = Eatery::create($fields);
+            $eatery->permit()->create($permit);
+            $eatery->features()->sync($featureIds);
+
+            return $eatery;
+        });
+
+        return redirect()->route('eateries.show', $eatery)->with('status', 'Eatery added.');
     }
 
     public function show(Eatery $eatery): View
     {
-        return view('pages.pending', [
-            'heading' => $eatery->name,
-            'description' => 'Eatery details are being prepared.',
+        $eatery->load([
+            'district', 'features', 'permit',
+            'dishes' => fn ($query) => $query->orderByDesc('is_bestseller')->orderBy('name'),
+            'reviews' => fn ($query) => $query->with('user')->latest()->orderByDesc('id'),
+        ])->loadCount('reviews')->loadAvg('reviews', 'rating');
+
+        return view('eateries.show', [
+            'eatery' => $eatery,
+            'users' => $eatery->is_open ? User::orderBy('name')->get(['id', 'name']) : collect(),
         ]);
     }
 
     public function edit(Eatery $eatery): View
     {
-        return view('pages.pending', [
-            'heading' => 'Edit '.$eatery->name,
-            'description' => 'The eatery edit form is being prepared.',
+        $eatery->load(['permit', 'features']);
+
+        return view('eateries.edit', [
+            'eatery' => $eatery,
+            'districts' => District::orderBy('name')->get(),
+            'features' => Feature::orderBy('name')->get(),
         ]);
     }
 
-    public function update(Eatery $eatery): void
+    public function update(UpdateEateryRequest $request, Eatery $eatery): RedirectResponse
     {
-        abort(501, 'Eatery updates are not available yet.');
+        $fields = $request->validated();
+        $featureIds = $fields['features'];
+        $permit = ['permit_no' => $fields['permit_no'], 'expires_on' => $fields['expires_on']];
+        unset($fields['features'], $fields['permit_no'], $fields['expires_on']);
+        $fields['slug'] = Str::slug($fields['name']);
+        $fields['is_open'] = (bool) ($fields['is_open'] ?? false);
+
+        DB::transaction(function () use ($eatery, $fields, $permit, $featureIds) {
+            $eatery->update($fields);
+            $eatery->permit()->update($permit);
+            $eatery->features()->sync($featureIds);
+        });
+
+        return redirect()->route('eateries.show', $eatery)->with('status', 'Eatery updated.');
     }
 
-    public function destroy(Eatery $eatery): void
+    public function destroy(Eatery $eatery): RedirectResponse
     {
-        abort(501, 'Eatery deletion is not available yet.');
+        DB::transaction(function () use ($eatery) {
+            $eatery->permit()->delete();
+            $eatery->dishes()->delete();
+            $eatery->reviews()->delete();
+            $eatery->features()->detach();
+            $eatery->delete();
+        });
+
+        return redirect()->route('eateries.index')->with('status', 'Eatery deleted.');
     }
 }

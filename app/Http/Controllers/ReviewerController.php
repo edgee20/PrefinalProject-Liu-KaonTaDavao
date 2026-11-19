@@ -9,9 +9,10 @@ class ReviewerController extends Controller
 {
     public function show(User $user): View
     {
-        return view('pages.pending', [
-            'heading' => $user->name,
-            'description' => 'This reviewer’s food notes are being prepared.',
+        $user->loadCount('reviews')->load([
+            'reviews' => fn ($query) => $query->with('eatery')->latest()->orderByDesc('id'),
         ]);
+
+        return view('reviewers.show', compact('user'));
     }
 }

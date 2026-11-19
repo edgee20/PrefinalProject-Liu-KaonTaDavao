@@ -46,3 +46,13 @@
         @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-sm bg-forest px-5 py-3 text-sm font-semibold text-white hover:bg-ink;
     }
 }
+
+@layer components {
+    .field-error {
+        @apply mt-2 text-sm text-red-700;
+    }
+
+    .button-secondary {
+        @apply inline-flex items-center justify-center rounded-sm border border-forest px-4 py-2.5 text-sm font-semibold text-forest hover:bg-paper;
+    }
+}

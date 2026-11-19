@@ -9,17 +9,15 @@ class DistrictController extends Controller
 {
     public function index(): View
     {
-        return view('pages.pending', [
-            'heading' => 'Explore by district',
-            'description' => 'From Poblacion to Calinan, find a table in your neighborhood.',
-        ]);
+        return view('districts.index', ['districts' => District::withCount('eateries')->orderBy('name')->get()]);
     }
 
     public function show(District $district): View
     {
-        return view('pages.pending', [
-            'heading' => $district->name,
-            'description' => 'The district guide is being prepared.',
-        ]);
+        $district->loadCount('reviews');
+        $eateries = $district->eateries()->with(['district', 'features'])
+            ->withCount('reviews')->withAvg('reviews', 'rating')->orderBy('name')->get();
+
+        return view('districts.show', compact('district', 'eateries'));
     }
 }
